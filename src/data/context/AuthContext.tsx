@@ -1,6 +1,7 @@
-import { createContext, useState } from "react";
+import { createContext, useState, useEffect } from "react";
 import route from "next/router";
 import firebase from "../../firebase/config";
+import Cookies from "js-cookie";
 import Usuario from "../../model/Usuario";
 
 interface AuthContextProps {
@@ -24,17 +25,45 @@ const AuthContext = createContext<AuthContextProps>({})
 
 export function AuthProvider(props) {
     const [usuario, setUsuario] = useState<Usuario>()
+    const [carregando, setCarregando] = useState<boolean>(true)
+
+    async function configurarSessao(usuarioFirebase) {
+        if (usuarioFirebase?.email) {
+            const usuario = await usuarioNormalizado(usuarioFirebase)
+            setUsuario(usuario)
+            gerenciarCookie(true)
+            setCarregando(false)
+
+            return usuario.email
+        } else {
+            setUsuario(null)
+            gerenciarCookie(false)
+            setCarregando(false)
+
+            return false
+        }
+    }
 
     async function loginGoogle() {
         const resp = await firebase.auth().signInWithPopup(
             new firebase.auth.GoogleAuthProvider()
         )
-        
-        if (resp.user?.email) {
 
-            const usuario = await usuarioNormalizado(resp.user)
-            setUsuario(usuario)
-            route.push('/')
+        configurarSessao(resp.user)
+        route.push('/')
+    }
+
+    useEffect(() => {
+        const cancelar = firebase.auth().onIdTokenChanged(configurarSessao)
+        return () => cancelar()
+    }, [])
+
+
+    function gerenciarCookie(logado: boolean) {
+        if (logado) {
+            Cookies.set('admin-template-cod3r-auth', logado, { expires: 7 })
+        } else {
+            Cookies.remove('admin-template-cod3r-auth')
         }
     }
 
